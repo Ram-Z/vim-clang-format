@@ -170,16 +170,11 @@ function! s:detect_style_file()
 endfunction
 
 function! clang_format#format(line1, line2)
-    let args = printf(" -lines=%d:%d", a:line1, a:line2)
-    if ! (g:clang_format#detect_style_file && s:detect_style_file())
-        let args .= printf(" -style=%s ", s:make_style_options())
-    else
-        let args .= " -style=file "
-    endif
-    let args .= printf("-assume-filename=%s ", shellescape(escape(expand('%'), " \t")))
-    let args .= g:clang_format#extra_args
+    let args = ""
+    let args .= " -style=file "
+    let args .= printf(" -assume-filename=%s ", "main.cpp")
     let clang_format = printf("%s %s --", g:clang_format#command, args)
-    return s:system(clang_format, join(getline(1, '$'), "\n"))
+    return s:system(clang_format, join(getline(a:line1, a:line2), "\n"))
 endfunction
 " }}}
 
@@ -197,34 +192,12 @@ function! clang_format#replace(line1, line2)
         let formatted = clang_format#format(a:line1, a:line2)
 
         if s:success(formatted)
-            try
-                " Note:
-                " Replace current buffer with workaround not to move
-                " the cursor on undo (issue #8)
-                "
-                " The points are:
-                "   - Do not touch the first line.
-                "   - Use :put (p, P and :put! is not available).
-                "
-                " To meet above condition:
-                "   - Delete all lines except for the first line.
-                "   - Put formatted text except for the first line.
-                "
-                let i = stridx(formatted, "\n")
-                if i == -1 || getline(1) !=# formatted[:i-1]
-                    throw "fallback"
-                endif
+            let indent = indent(a:line1) / shiftwidth()
+            silent exe a:line1.','a:line2.'delete _'
 
-                call setreg('g', formatted[i+1:], 'V')
-                undojoin | silent normal! 2gg"_dG
-                silent put g
-            catch
-                " Fallback:
-                " The previous way.  It lets the cursor move to the first line
-                " on undo.
-                call setreg('g', formatted, 'V')
-                silent keepjumps normal! ggVG"gp
-            endtry
+            call setreg('g', formatted, 'V')
+            silent put! g
+            silent exe "'[,']".repeat('>', indent)
         else
             call s:error_message(formatted)
         endif
